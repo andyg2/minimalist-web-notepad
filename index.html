@@ -33,12 +33,11 @@
     #tabs-list {
       display: flex;
       flex-wrap: wrap;
-      /* Allows tabs to wrap to new lines */
       flex-grow: 1;
     }
 
     .tab {
-      padding: 8px 15px;
+      padding: 8px 10px 8px 15px;
       margin: 0 5px 5px 0;
       background: #fdfdfd;
       border: 1px solid #ccc;
@@ -46,6 +45,9 @@
       cursor: pointer;
       user-select: none;
       transition: background-color 0.2s, color 0.2s;
+      display: flex;
+      /* For aligning text and delete button */
+      align-items: center;
     }
 
     .tab:hover {
@@ -56,6 +58,23 @@
       background: crimson;
       color: white;
       border-color: darkred;
+    }
+
+    .delete-tab-btn {
+      margin-left: 10px;
+      padding: 2px 6px;
+      font-size: 0.9em;
+      line-height: 1;
+      border-radius: 50%;
+      transition: background-color 0.2s;
+    }
+
+    .delete-tab-btn:hover {
+      background: rgba(0, 0, 0, 0.15);
+    }
+
+    .tab.active .delete-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
     }
 
     #add-tab-btn {
@@ -188,16 +207,24 @@
 
       // --- Core Functions ---
 
-      /**
-       * Renders the tabs in the tab bar based on the current state.
-       */
       function renderTabs() {
-        tabsList.innerHTML = ''; // Clear existing tabs
+        tabsList.innerHTML = '';
         notes.forEach(noteName => {
           const tabEl = document.createElement('div');
           tabEl.className = 'tab';
-          tabEl.textContent = noteName;
           tabEl.dataset.noteName = noteName;
+
+          const nameEl = document.createElement('span');
+          nameEl.textContent = noteName;
+
+          const deleteEl = document.createElement('span');
+          deleteEl.className = 'delete-tab-btn';
+          deleteEl.innerHTML = '&times;'; // The 'x' character
+          deleteEl.title = 'Delete note';
+
+          tabEl.appendChild(nameEl);
+          tabEl.appendChild(deleteEl);
+
           if (noteName === activeNoteName) {
             tabEl.classList.add('active');
           }
@@ -205,17 +232,11 @@
         });
       }
 
-      /**
-       * Switches the view to a different note.
-       * @param {string} noteName - The name of the note to switch to.
-       */
       function switchTab(noteName) {
         if (!noteName || !notes.includes(noteName)) {
-          // If the note doesn't exist, do nothing or switch to the first note
           if (notes.length > 0) {
             noteName = notes[0];
           } else {
-            // No notes exist at all, clear the editor
             activeNoteName = null;
             textarea.value = '';
             printable.textContent = '';
@@ -233,15 +254,12 @@
         printable.textContent = savedContent;
         document.title = activeNoteName;
 
-        renderTabs(); // Re-render to update the 'active' class
+        renderTabs();
         textarea.focus();
       }
 
-      /**
-       * Saves the current content of the textarea to localStorage.
-       */
       function saveContent() {
-        if (!activeNoteName) return; // Don't save if no tab is active
+        if (!activeNoteName) return;
 
         const storageKey = 'note-' + activeNoteName;
         const currentText = textarea.value;
@@ -254,12 +272,9 @@
         }
       }
 
-      /**
-       * Creates a new note/tab.
-       */
       function addNote() {
         let newName = prompt("Enter a name for the new note:");
-        if (!newName) return; // User cancelled
+        if (!newName) return;
 
         newName = newName.trim();
         if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
@@ -276,13 +291,9 @@
         switchTab(newName);
       }
 
-      /**
-       * Renames a note/tab.
-       * @param {string} oldName - The current name of the note to rename.
-       */
       function renameNote(oldName) {
         let newName = prompt("Enter a new name for the note:", oldName);
-        if (!newName || newName === oldName) return; // User cancelled or didn't change the name
+        if (!newName || newName === oldName) return;
 
         newName = newName.trim();
         if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
@@ -296,57 +307,90 @@
 
         const noteIndex = notes.indexOf(oldName);
         if (noteIndex > -1) {
-          // Update the name in our state array
           notes[noteIndex] = newName;
 
-          // Move the content in localStorage
           const oldContent = localStorage.getItem('note-' + oldName);
           if (oldContent) {
             localStorage.setItem('note-' + newName, oldContent);
             localStorage.removeItem('note-' + oldName);
           }
 
-          // Save the updated list of tabs
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
 
-          // If the renamed tab was the active one, update activeNoteName
           if (activeNoteName === oldName) {
             activeNoteName = newName;
             localStorage.setItem('notes_last_active', activeNoteName);
           }
 
-          // Re-render everything
           switchTab(activeNoteName);
+        }
+      }
+
+      /**
+       * Deletes a note after confirmation.
+       * @param {string} noteNameToDelete - The name of the note to delete.
+       */
+      function deleteNote(noteNameToDelete) {
+        if (!confirm(`Are you sure you want to delete the note "${noteNameToDelete}"?`)) {
+          return;
+        }
+
+        const index = notes.indexOf(noteNameToDelete);
+        if (index === -1) return;
+
+        const wasActive = (activeNoteName === noteNameToDelete);
+
+        // Remove from state and localStorage
+        notes.splice(index, 1);
+        localStorage.setItem('notes_tab_list', JSON.stringify(notes));
+        localStorage.removeItem('note-' + noteNameToDelete);
+
+        if (wasActive) {
+          if (notes.length > 0) {
+            // Switch to the previous tab, or the new first tab if the deleted one was first
+            const newIndex = Math.max(0, index - 1);
+            switchTab(notes[newIndex]);
+          } else {
+            // If the last tab was deleted, create a new default one
+            notes.push('untitled');
+            localStorage.setItem('notes_tab_list', JSON.stringify(notes));
+            switchTab('untitled');
+          }
+        } else {
+          // If a non-active tab was deleted, just re-render the list
+          renderTabs();
         }
       }
 
       // --- Initialization and Event Listeners ---
 
       function initialize() {
-        // Load the list of notes
         const savedNotes = localStorage.getItem('notes_tab_list');
         if (savedNotes) {
           notes = JSON.parse(savedNotes);
         }
 
-        // If no notes exist, create a default one
         if (notes.length === 0) {
           notes.push('welcome');
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
-          localStorage.setItem('note-welcome', 'Hello and welcome to your local notes!\n\n- Click the + button to add a new note.\n- Double-click a tab to rename it.\n- Everything is saved automatically in your browser.');
+          localStorage.setItem('note-welcome', 'Hello and welcome to your local notes!\n\n- Click the + button to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.\n- Everything is saved automatically in your browser.');
         }
 
-        // Load the last active note or default to the first one
         const lastActive = localStorage.getItem('notes_last_active');
         switchTab(lastActive || notes[0]);
 
-        // Event listener for adding a new tab
         addTabBtn.addEventListener('click', addNote);
 
-        // Event delegation for tab clicks and double-clicks
         tabsList.addEventListener('click', (e) => {
-          if (e.target.classList.contains('tab')) {
-            const noteName = e.target.dataset.noteName;
+          const tabEl = e.target.closest('.tab');
+          if (!tabEl) return; // Click was not inside a tab
+
+          if (e.target.classList.contains('delete-tab-btn')) {
+            // Clicked the delete button
+            deleteNote(tabEl.dataset.noteName);
+          } else {
+            // Clicked the tab body
+            const noteName = tabEl.dataset.noteName;
             if (noteName !== activeNoteName) {
               switchTab(noteName);
             }
@@ -354,19 +398,19 @@
         });
 
         tabsList.addEventListener('dblclick', (e) => {
-          if (e.target.classList.contains('tab')) {
-            renameNote(e.target.dataset.noteName);
+          const tabEl = e.target.closest('.tab');
+          // Make sure not to trigger rename when double-clicking the delete button
+          if (tabEl && !e.target.classList.contains('delete-tab-btn')) {
+            renameNote(tabEl.dataset.noteName);
           }
         });
 
-        // Event listener for auto-saving content
         textarea.addEventListener('input', () => {
           clearTimeout(saveTimeout);
-          saveTimeout = setTimeout(saveContent, 300); // Debounce
+          saveTimeout = setTimeout(saveContent, 300);
         });
       }
 
-      // Start the application
       initialize();
     });
   </script>
