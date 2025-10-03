@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Local Note</title>
+  <title>Local Notes</title>
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <style>
@@ -14,9 +14,70 @@
       font-family: sans-serif;
     }
 
+    /* --- Tab Styles --- */
+    #tabs-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      padding: 10px 15px;
+      background: #d8dde2;
+      display: flex;
+      align-items: flex-start;
+      min-height: 40px;
+      box-sizing: border-box;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      z-index: 10;
+    }
+
+    #tabs-list {
+      display: flex;
+      flex-wrap: wrap;
+      /* Allows tabs to wrap to new lines */
+      flex-grow: 1;
+    }
+
+    .tab {
+      padding: 8px 15px;
+      margin: 0 5px 5px 0;
+      background: #fdfdfd;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color 0.2s, color 0.2s;
+    }
+
+    .tab:hover {
+      background: #f0f0f0;
+    }
+
+    .tab.active {
+      background: crimson;
+      color: white;
+      border-color: darkred;
+    }
+
+    #add-tab-btn {
+      padding: 6px 12px;
+      margin-right: 10px;
+      font-size: 1.2em;
+      font-weight: bold;
+      background: #c3c8ce;
+      border: 1px solid #aaa;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #add-tab-btn:hover {
+      background: #b7bcc1;
+    }
+
+
+    /* --- Main Content Area Styles --- */
     .container {
       position: absolute;
-      top: 20px;
+      top: 70px;
       right: 20px;
       bottom: 20px;
       left: 20px;
@@ -38,9 +99,42 @@
       display: none;
     }
 
+    /* --- Dark Mode --- */
     @media (prefers-color-scheme: dark) {
       body {
         background: #333b4d;
+      }
+
+      #tabs-container {
+        background: #24262b;
+        border-bottom: 1px solid #495265;
+        box-shadow: none;
+      }
+
+      .tab {
+        background: #3a3f4b;
+        color: #eee;
+        border-color: #555c6e;
+      }
+
+      .tab:hover {
+        background: #495265;
+      }
+
+      .tab.active {
+        background: crimson;
+        color: white;
+        border-color: darkred;
+      }
+
+      #add-tab-btn {
+        background: #3a3f4b;
+        color: #eee;
+        border-color: #555c6e;
+      }
+
+      #add-tab-btn:hover {
+        background: #495265;
       }
 
       #content {
@@ -50,7 +144,10 @@
       }
     }
 
+    /* --- Print Styles --- */
     @media print {
+
+      #tabs-container,
       .container {
         display: none;
       }
@@ -65,77 +162,212 @@
 </head>
 
 <body>
+
+  <div id="tabs-container">
+    <button id="add-tab-btn" title="Add new note">+</button>
+    <div id="tabs-list"></div>
+  </div>
+
   <div class="container">
     <textarea id="content"></textarea>
   </div>
   <pre id="printable"></pre>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
+      // DOM Elements
+      const tabsList = document.getElementById('tabs-list');
+      const addTabBtn = document.getElementById('add-tab-btn');
       const textarea = document.getElementById('content');
       const printable = document.getElementById('printable');
 
-      // --- 1. Note Name Handling (replaces PHP URL logic) ---
-      const urlParams = new URLSearchParams(window.location.search);
-      let noteName = urlParams.get('note');
-
-      // If no note name is provided, or if the name is invalid, generate a random one and redirect.
-      if (!noteName || noteName.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(noteName)) {
-        const randomName = Math.random().toString(36).substring(2, 7);
-        // Using replace to avoid adding the invalid URL to the browser history
-        window.location.replace('?note=' + randomName);
-        return; // Stop script execution
-      }
-
-      // --- 2. Raw Content View (replaces PHP raw view logic) ---
-      if (urlParams.has('raw')) {
-        const storedContent = localStorage.getItem('note-' + noteName);
-        document.body.innerHTML = ''; // Clear the body
-        const pre = document.createElement('pre');
-        pre.style.whiteSpace = 'pre-wrap';
-        pre.style.wordBreak = 'break-word';
-        pre.textContent = storedContent || 'Note not found.';
-        document.body.appendChild(pre);
-        return; // Stop script execution
-      }
-
-      // --- 3. Normal Operation ---
-      // Set the page title
-      document.title = noteName;
-
-      // The key used to store the note in localStorage.
-      // We add a prefix to avoid potential conflicts with other scripts.
-      const storageKey = 'note-' + noteName;
-
-      // Load content from localStorage when the page loads
-      const savedContent = localStorage.getItem(storageKey) || '';
-      textarea.value = savedContent;
-      printable.textContent = savedContent;
-
-      textarea.focus();
-
+      // App State
+      let notes = [];
+      let activeNoteName = null;
       let saveTimeout;
-      // Listen for input on the textarea to auto-save
-      textarea.addEventListener('input', function () {
-        // Clear any previous scheduled save to avoid saving on every keystroke
-        clearTimeout(saveTimeout);
 
-        // Schedule a save for 300ms in the future
-        saveTimeout = setTimeout(function () {
-          const currentText = textarea.value;
+      // --- Core Functions ---
 
-          // Update the printable contents.
-          printable.textContent = currentText;
-
-          // If the text is not empty, save it to localStorage.
-          if (currentText.length > 0) {
-            localStorage.setItem(storageKey, currentText);
+      /**
+       * Renders the tabs in the tab bar based on the current state.
+       */
+      function renderTabs() {
+        tabsList.innerHTML = ''; // Clear existing tabs
+        notes.forEach(noteName => {
+          const tabEl = document.createElement('div');
+          tabEl.className = 'tab';
+          tabEl.textContent = noteName;
+          tabEl.dataset.noteName = noteName;
+          if (noteName === activeNoteName) {
+            tabEl.classList.add('active');
           }
-          // If the text is empty, remove the item from localStorage (like deleting the file).
-          else {
-            localStorage.removeItem(storageKey);
+          tabsList.appendChild(tabEl);
+        });
+      }
+
+      /**
+       * Switches the view to a different note.
+       * @param {string} noteName - The name of the note to switch to.
+       */
+      function switchTab(noteName) {
+        if (!noteName || !notes.includes(noteName)) {
+          // If the note doesn't exist, do nothing or switch to the first note
+          if (notes.length > 0) {
+            noteName = notes[0];
+          } else {
+            // No notes exist at all, clear the editor
+            activeNoteName = null;
+            textarea.value = '';
+            printable.textContent = '';
+            document.title = 'Local Notes';
+            renderTabs();
+            return;
           }
-        }, 300); // Debounce time in milliseconds
-      });
+        }
+
+        activeNoteName = noteName;
+        localStorage.setItem('notes_last_active', activeNoteName);
+
+        const savedContent = localStorage.getItem('note-' + activeNoteName) || '';
+        textarea.value = savedContent;
+        printable.textContent = savedContent;
+        document.title = activeNoteName;
+
+        renderTabs(); // Re-render to update the 'active' class
+        textarea.focus();
+      }
+
+      /**
+       * Saves the current content of the textarea to localStorage.
+       */
+      function saveContent() {
+        if (!activeNoteName) return; // Don't save if no tab is active
+
+        const storageKey = 'note-' + activeNoteName;
+        const currentText = textarea.value;
+        printable.textContent = currentText;
+
+        if (currentText.length > 0) {
+          localStorage.setItem(storageKey, currentText);
+        } else {
+          localStorage.removeItem(storageKey);
+        }
+      }
+
+      /**
+       * Creates a new note/tab.
+       */
+      function addNote() {
+        let newName = prompt("Enter a name for the new note:");
+        if (!newName) return; // User cancelled
+
+        newName = newName.trim();
+        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
+          alert("Invalid name. Please use only letters, numbers, hyphens, and underscores.");
+          return;
+        }
+        if (notes.includes(newName)) {
+          alert("A note with this name already exists.");
+          return;
+        }
+
+        notes.push(newName);
+        localStorage.setItem('notes_tab_list', JSON.stringify(notes));
+        switchTab(newName);
+      }
+
+      /**
+       * Renames a note/tab.
+       * @param {string} oldName - The current name of the note to rename.
+       */
+      function renameNote(oldName) {
+        let newName = prompt("Enter a new name for the note:", oldName);
+        if (!newName || newName === oldName) return; // User cancelled or didn't change the name
+
+        newName = newName.trim();
+        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
+          alert("Invalid name. Please use only letters, numbers, hyphens, and underscores.");
+          return;
+        }
+        if (notes.includes(newName)) {
+          alert("A note with this name already exists.");
+          return;
+        }
+
+        const noteIndex = notes.indexOf(oldName);
+        if (noteIndex > -1) {
+          // Update the name in our state array
+          notes[noteIndex] = newName;
+
+          // Move the content in localStorage
+          const oldContent = localStorage.getItem('note-' + oldName);
+          if (oldContent) {
+            localStorage.setItem('note-' + newName, oldContent);
+            localStorage.removeItem('note-' + oldName);
+          }
+
+          // Save the updated list of tabs
+          localStorage.setItem('notes_tab_list', JSON.stringify(notes));
+
+          // If the renamed tab was the active one, update activeNoteName
+          if (activeNoteName === oldName) {
+            activeNoteName = newName;
+            localStorage.setItem('notes_last_active', activeNoteName);
+          }
+
+          // Re-render everything
+          switchTab(activeNoteName);
+        }
+      }
+
+      // --- Initialization and Event Listeners ---
+
+      function initialize() {
+        // Load the list of notes
+        const savedNotes = localStorage.getItem('notes_tab_list');
+        if (savedNotes) {
+          notes = JSON.parse(savedNotes);
+        }
+
+        // If no notes exist, create a default one
+        if (notes.length === 0) {
+          notes.push('welcome');
+          localStorage.setItem('notes_tab_list', JSON.stringify(notes));
+          localStorage.setItem('note-welcome', 'Hello and welcome to your local notes!\n\n- Click the + button to add a new note.\n- Double-click a tab to rename it.\n- Everything is saved automatically in your browser.');
+        }
+
+        // Load the last active note or default to the first one
+        const lastActive = localStorage.getItem('notes_last_active');
+        switchTab(lastActive || notes[0]);
+
+        // Event listener for adding a new tab
+        addTabBtn.addEventListener('click', addNote);
+
+        // Event delegation for tab clicks and double-clicks
+        tabsList.addEventListener('click', (e) => {
+          if (e.target.classList.contains('tab')) {
+            const noteName = e.target.dataset.noteName;
+            if (noteName !== activeNoteName) {
+              switchTab(noteName);
+            }
+          }
+        });
+
+        tabsList.addEventListener('dblclick', (e) => {
+          if (e.target.classList.contains('tab')) {
+            renameNote(e.target.dataset.noteName);
+          }
+        });
+
+        // Event listener for auto-saving content
+        textarea.addEventListener('input', () => {
+          clearTimeout(saveTimeout);
+          saveTimeout = setTimeout(saveContent, 300); // Debounce
+        });
+      }
+
+      // Start the application
+      initialize();
     });
   </script>
 </body>
