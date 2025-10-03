@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Note</title>
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <style>
+    body {
+      margin: 0;
+      background: #ebeef1;
+      font-family: sans-serif;
+    }
+
+    .container {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      bottom: 20px;
+      left: 20px;
+    }
+
+    #content {
+      margin: 0;
+      padding: 20px;
+      overflow-y: auto;
+      resize: none;
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      outline: none;
+    }
+
+    #printable {
+      display: none;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      body {
+        background: #333b4d;
+      }
+
+      #content {
+        background: #24262b;
+        color: #fff;
+        border-color: #495265;
+      }
+    }
+
+    @media print {
+      .container {
+        display: none;
+      }
+
+      #printable {
+        display: block;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <textarea id="content"></textarea>
+  </div>
+  <pre id="printable"></pre>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const textarea = document.getElementById('content');
+      const printable = document.getElementById('printable');
+
+      // --- 1. Note Name Handling (replaces PHP URL logic) ---
+      const urlParams = new URLSearchParams(window.location.search);
+      let noteName = urlParams.get('note');
+
+      // If no note name is provided, or if the name is invalid, generate a random one and redirect.
+      if (!noteName || noteName.length > 64 || !/^[a-zA-Z0-9_-]+$/.test(noteName)) {
+        const randomName = Math.random().toString(36).substring(2, 7);
+        // Using replace to avoid adding the invalid URL to the browser history
+        window.location.replace('?note=' + randomName);
+        return; // Stop script execution
+      }
+
+      // --- 2. Raw Content View (replaces PHP raw view logic) ---
+      if (urlParams.has('raw')) {
+        const storedContent = localStorage.getItem('note-' + noteName);
+        document.body.innerHTML = ''; // Clear the body
+        const pre = document.createElement('pre');
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.wordBreak = 'break-word';
+        pre.textContent = storedContent || 'Note not found.';
+        document.body.appendChild(pre);
+        return; // Stop script execution
+      }
+
+      // --- 3. Normal Operation ---
+      // Set the page title
+      document.title = noteName;
+
+      // The key used to store the note in localStorage.
+      // We add a prefix to avoid potential conflicts with other scripts.
+      const storageKey = 'note-' + noteName;
+
+      // Load content from localStorage when the page loads
+      const savedContent = localStorage.getItem(storageKey) || '';
+      textarea.value = savedContent;
+      printable.textContent = savedContent;
+
+      textarea.focus();
+
+      let saveTimeout;
+      // Listen for input on the textarea to auto-save
+      textarea.addEventListener('input', function () {
+        // Clear any previous scheduled save to avoid saving on every keystroke
+        clearTimeout(saveTimeout);
+
+        // Schedule a save for 300ms in the future
+        saveTimeout = setTimeout(function () {
+          const currentText = textarea.value;
+
+          // Update the printable contents.
+          printable.textContent = currentText;
+
+          // If the text is not empty, save it to localStorage.
+          if (currentText.length > 0) {
+            localStorage.setItem(storageKey, currentText);
+          }
+          // If the text is empty, remove the item from localStorage (like deleting the file).
+          else {
+            localStorage.removeItem(storageKey);
+          }
+        }, 300); // Debounce time in milliseconds
+      });
+    });
+  </script>
+</body>
+
+</html>
