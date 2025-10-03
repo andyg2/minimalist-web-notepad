@@ -1,69 +1,52 @@
-# Minimalist Web Notepad
+# Minimalist Local Notepad
 
-This is an open-source clone of the now-defunct notepad.cc: "a piece of paper in the cloud".
+This is a serverless, single-file adaptation of the original [Minimalist Web Notepad](https://github.com/andyg2/minimalist-web-notepad). It has been re-engineered to be a completely private, browser-based notepad that requires no web server or internet connection to function.
 
-See demo at https://notes.orga.cat or https://notes.orga.cat/whatever.
+## Your Data Stays With You
 
-## Installation
+The most important feature of this notepad is **privacy**.
 
-Make sure the web server is allowed to write to the `_tmp` directory.
+* **100% Client-Side:** The application is a single `index.html` file that runs entirely in your web browser. There is no backend server.
+* **No Data Transmission:** Your notes are **never** sent over the internet. All content is saved directly into your browser's `localStorage`.
+* **Persistent & Private:** Your data remains on your computer within the specific browser you used. It is not accessible to other websites, other browsers on your machine, or anyone else.
 
-### On Apache
+## How to Use
 
-You may need to enable mod_rewrite and allow `.htaccess` files in your site configuration.
-See [How To Set Up mod_rewrite for Apache](https://www.digitalocean.com/community/tutorials/how-to-set-up-mod_rewrite-for-apache-on-ubuntu-14-04).
+Getting started is incredibly simple:
 
-### On Nginx
+1. Download the `index.html` file.
+2. Open it in any modern web browser (like Chrome, Firefox, Safari, or Edge).
 
-To enable URL rewriting, put something like this in your configuration file:
+That's it. You can bookmark the local file path for easy access. Your notes will be saved and will reappear the next time you open the file.
 
-If the project resides in the root directory:
-```
-location / {
-    rewrite ^/([a-zA-Z0-9_-]+)$ /index.php?note=$1;
-}
-```
+## Features
 
-If the project resides in a subdirectory:
-```
-location ~* ^/notes/([a-zA-Z0-9_-]+)$ {
-    try_files $uri /notes/index.php?note=$1;
-}
-```
+This notepad provides a simple yet powerful tabbed interface for managing multiple notes.
 
-If parameters need to be passed in Nginx (such as `?raw`), then `&$args` needs to be added to the end of the `$1` match:
-```
-location ~* ^/notes/([a-zA-Z0-9_-]+)$ {
-    try_files $uri /notes/index.php?note=$1&$args;
-}
-```
+* **Tab Management:**
+  * Click the **+** button on the top-left to create a new note with a unique name.
+  * Click on any tab to instantly switch between your notes.
+  * The active tab is highlighted in crimson for easy identification.
 
-## Usage (CLI)
+* **In-Place Renaming:**
+  * **Double-click** any tab's name to edit it directly.
+  * Press `Enter` or click away to save the new name.
+  * Press `Esc` to cancel the edit.
 
-Using the command-line interface you can both save and retrieve notes. Here are some examples using `curl`:
+* **Safe Deletion:**
+  * Click the small `×` on the right side of any tab.
+  * A confirmation dialog will appear to prevent accidental deletion.
 
-Retrieve a note's content and save it to a local file:
+* **Automatic Saving:**
+  * There is no "Save" button. All changes are saved automatically to your browser's storage a moment after you stop typing.
 
-```
-curl https://example.com/notes/test > test.txt
-```
-
-Save specific text to a note:
-
-```
-curl https://example.com/notes/test -d 'hello,
-
-welcome to my pad!
-'
-```
-
-Save the content of a local file (e.g., `/etc/hosts`) to a note:
-
-```
-cat /etc/hosts | curl https://example.com/notes/hosts --data-binary @-
-```
+* **Responsive Design:**
+  * The interface supports both light and dark modes based on your system's preference.
+  * The tab bar will wrap to multiple lines if you have too many tabs to fit in a single row.
 
 ## Copyright and license
+
+This project is a derivative work. The original copyright and license are preserved below.
 
 Copyright 2012 Pere Orga <pere@orga.cat>
 
@@ -71,7 +54,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this work except in compliance with the License.
 You may obtain a copy of the License at:
 
-   http://www.apache.org/licenses/LICENSE-2.0
+   <http://www.apache.org/licenses/LICENSE-2.0>
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
