@@ -46,7 +46,6 @@
       user-select: none;
       transition: background-color 0.2s, color 0.2s;
       display: flex;
-      /* For aligning text and delete button */
       align-items: center;
     }
 
@@ -58,6 +57,17 @@
       background: crimson;
       color: white;
       border-color: darkred;
+    }
+
+    .tab-name {
+      outline: none;
+    }
+
+    .tab-name[contenteditable="true"] {
+      outline: 2px solid #007bff;
+      border-radius: 2px;
+      padding: 0 3px;
+      cursor: text;
     }
 
     .delete-tab-btn {
@@ -92,7 +102,6 @@
       background: #b7bcc1;
     }
 
-
     /* --- Main Content Area Styles --- */
     .container {
       position: absolute;
@@ -117,6 +126,62 @@
     #printable {
       display: none;
     }
+
+    /* --- Confirmation Modal Styles --- */
+    #confirm-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      /* Hidden by default */
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    #confirm-modal.visible {
+      display: flex;
+    }
+
+    .modal-content {
+      background: white;
+      padding: 25px;
+      border-radius: 8px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      text-align: center;
+      max-width: 400px;
+    }
+
+    .modal-content h3 {
+      margin-top: 0;
+    }
+
+    .modal-buttons {
+      margin-top: 20px;
+    }
+
+    .modal-buttons button {
+      padding: 10px 20px;
+      margin: 0 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+    }
+
+    #confirm-delete-btn {
+      background: #dc3545;
+      color: white;
+      border-color: #c82333;
+    }
+
+    #cancel-delete-btn {
+      background: #f8f9fa;
+    }
+
 
     /* --- Dark Mode --- */
     @media (prefers-color-scheme: dark) {
@@ -146,6 +211,10 @@
         border-color: darkred;
       }
 
+      .tab-name[contenteditable="true"] {
+        outline-color: #4ea8ff;
+      }
+
       #add-tab-btn {
         background: #3a3f4b;
         color: #eee;
@@ -161,13 +230,25 @@
         color: #fff;
         border-color: #495265;
       }
+
+      .modal-content {
+        background: #3a3f4b;
+        color: #eee;
+      }
+
+      #cancel-delete-btn {
+        background: #555c6e;
+        color: #eee;
+        border-color: #6c757d;
+      }
     }
 
     /* --- Print Styles --- */
     @media print {
 
       #tabs-container,
-      .container {
+      .container,
+      #confirm-modal {
         display: none;
       }
 
@@ -192,6 +273,18 @@
   </div>
   <pre id="printable"></pre>
 
+  <!-- Confirmation Modal HTML -->
+  <div id="confirm-modal">
+    <div class="modal-content">
+      <h3>Delete Note?</h3>
+      <p>Are you sure you want to permanently delete the note "<strong id="note-to-delete-name"></strong>"?</p>
+      <div class="modal-buttons">
+        <button id="cancel-delete-btn">Cancel</button>
+        <button id="confirm-delete-btn">Delete</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       // DOM Elements
@@ -199,10 +292,15 @@
       const addTabBtn = document.getElementById('add-tab-btn');
       const textarea = document.getElementById('content');
       const printable = document.getElementById('printable');
+      const confirmModal = document.getElementById('confirm-modal');
+      const noteToDeleteNameEl = document.getElementById('note-to-delete-name');
+      const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+      const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
 
       // App State
       let notes = [];
       let activeNoteName = null;
+      let notePendingDeletion = null;
       let saveTimeout;
 
       // --- Core Functions ---
@@ -215,11 +313,12 @@
           tabEl.dataset.noteName = noteName;
 
           const nameEl = document.createElement('span');
+          nameEl.className = 'tab-name';
           nameEl.textContent = noteName;
 
           const deleteEl = document.createElement('span');
           deleteEl.className = 'delete-tab-btn';
-          deleteEl.innerHTML = '&times;'; // The 'x' character
+          deleteEl.innerHTML = '&times;';
           deleteEl.title = 'Delete note';
 
           tabEl.appendChild(nameEl);
@@ -234,25 +333,21 @@
 
       function switchTab(noteName) {
         if (!noteName || !notes.includes(noteName)) {
-          if (notes.length > 0) {
-            noteName = notes[0];
-          } else {
-            activeNoteName = null;
-            textarea.value = '';
-            printable.textContent = '';
-            document.title = 'Local Notes';
-            renderTabs();
-            return;
-          }
+          noteName = notes.length > 0 ? notes[0] : null;
         }
 
         activeNoteName = noteName;
-        localStorage.setItem('notes_last_active', activeNoteName);
-
-        const savedContent = localStorage.getItem('note-' + activeNoteName) || '';
-        textarea.value = savedContent;
-        printable.textContent = savedContent;
-        document.title = activeNoteName;
+        if (activeNoteName) {
+          localStorage.setItem('notes_last_active', activeNoteName);
+          const savedContent = localStorage.getItem('note-' + activeNoteName) || '';
+          textarea.value = savedContent;
+          printable.textContent = savedContent;
+          document.title = activeNoteName;
+        } else {
+          textarea.value = '';
+          printable.textContent = '';
+          document.title = 'Local Notes';
+        }
 
         renderTabs();
         textarea.focus();
@@ -260,11 +355,9 @@
 
       function saveContent() {
         if (!activeNoteName) return;
-
         const storageKey = 'note-' + activeNoteName;
         const currentText = textarea.value;
         printable.textContent = currentText;
-
         if (currentText.length > 0) {
           localStorage.setItem(storageKey, currentText);
         } else {
@@ -273,107 +366,100 @@
       }
 
       function addNote() {
-        let newName = prompt("Enter a name for the new note:");
-        if (!newName) return;
-
-        newName = newName.trim();
-        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
-          alert("Invalid name. Please use only letters, numbers, hyphens, and underscores.");
+        let newName = "New Note";
+        const validationError = validateNoteName(newName, null);
+        if (validationError) {
+          alert(validationError);
           return;
         }
-        if (notes.includes(newName)) {
-          alert("A note with this name already exists.");
-          return;
-        }
-
         notes.push(newName);
         localStorage.setItem('notes_tab_list', JSON.stringify(notes));
         switchTab(newName);
       }
 
-      function renameNote(oldName) {
-        let newName = prompt("Enter a new name for the note:", oldName);
-        if (!newName || newName === oldName) return;
+      function validateNoteName(newName, oldName) {
+        if (!newName) return "Name cannot be empty.";
+        if (!/^[a-zA-Z0-9 _-]+$/.test(newName)) return "Invalid name. Please use only letters, numbers, hyphens, and underscores.";
+        if (newName !== oldName && notes.includes(newName)) return "A note with this name already exists.";
+        return null; // No error
+      }
 
-        newName = newName.trim();
-        if (!/^[a-zA-Z0-9_-]+$/.test(newName)) {
-          alert("Invalid name. Please use only letters, numbers, hyphens, and underscores.");
-          return;
-        }
-        if (notes.includes(newName)) {
-          alert("A note with this name already exists.");
-          return;
+      function performRename(oldName, newName) {
+        const validationError = validateNoteName(newName, oldName);
+        if (validationError) {
+          alert(validationError);
+          return oldName; // Return old name to revert
         }
 
         const noteIndex = notes.indexOf(oldName);
         if (noteIndex > -1) {
           notes[noteIndex] = newName;
-
           const oldContent = localStorage.getItem('note-' + oldName);
           if (oldContent) {
             localStorage.setItem('note-' + newName, oldContent);
             localStorage.removeItem('note-' + oldName);
           }
-
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
-
           if (activeNoteName === oldName) {
             activeNoteName = newName;
             localStorage.setItem('notes_last_active', activeNoteName);
           }
-
-          switchTab(activeNoteName);
+          switchTab(activeNoteName); // Full re-render
         }
+        return newName; // Success
       }
 
-      /**
-       * Deletes a note after confirmation.
-       * @param {string} noteNameToDelete - The name of the note to delete.
-       */
-      function deleteNote(noteNameToDelete) {
-        if (!confirm(`Are you sure you want to delete the note "${noteNameToDelete}"?`)) {
-          return;
-        }
+      function showDeleteModal(noteNameToDelete) {
+        notePendingDeletion = noteNameToDelete;
+        noteToDeleteNameEl.textContent = noteNameToDelete;
+        confirmModal.classList.add('visible');
+      }
+
+      function hideDeleteModal() {
+        notePendingDeletion = null;
+        confirmModal.classList.remove('visible');
+      }
+
+      function executeDelete() {
+        const noteNameToDelete = notePendingDeletion;
+        if (!noteNameToDelete) return;
 
         const index = notes.indexOf(noteNameToDelete);
         if (index === -1) return;
 
-        const wasActive = (activeNoteName === noteNameToDelete);
-
-        // Remove from state and localStorage
         notes.splice(index, 1);
         localStorage.setItem('notes_tab_list', JSON.stringify(notes));
         localStorage.removeItem('note-' + noteNameToDelete);
 
-        if (wasActive) {
+        if (activeNoteName === noteNameToDelete) {
           if (notes.length > 0) {
-            // Switch to the previous tab, or the new first tab if the deleted one was first
             const newIndex = Math.max(0, index - 1);
             switchTab(notes[newIndex]);
           } else {
-            // If the last tab was deleted, create a new default one
             notes.push('untitled');
             localStorage.setItem('notes_tab_list', JSON.stringify(notes));
             switchTab('untitled');
           }
         } else {
-          // If a non-active tab was deleted, just re-render the list
           renderTabs();
         }
+        hideDeleteModal();
       }
 
       // --- Initialization and Event Listeners ---
 
       function initialize() {
         const savedNotes = localStorage.getItem('notes_tab_list');
-        if (savedNotes) {
-          notes = JSON.parse(savedNotes);
+        try {
+          notes = savedNotes ? JSON.parse(savedNotes) : [];
+        } catch (e) {
+          notes = [];
         }
 
         if (notes.length === 0) {
           notes.push('welcome');
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
-          localStorage.setItem('note-welcome', 'Hello and welcome to your local notes!\n\n- Click the + button to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.\n- Everything is saved automatically in your browser.');
+          localStorage.setItem('note-welcome', 'Hello and welcome!\n\n- Click + to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.');
         }
 
         const lastActive = localStorage.getItem('notes_last_active');
@@ -383,31 +469,58 @@
 
         tabsList.addEventListener('click', (e) => {
           const tabEl = e.target.closest('.tab');
-          if (!tabEl) return; // Click was not inside a tab
-
+          if (!tabEl) return;
           if (e.target.classList.contains('delete-tab-btn')) {
-            // Clicked the delete button
-            deleteNote(tabEl.dataset.noteName);
+            showDeleteModal(tabEl.dataset.noteName);
           } else {
-            // Clicked the tab body
             const noteName = tabEl.dataset.noteName;
-            if (noteName !== activeNoteName) {
-              switchTab(noteName);
-            }
+            if (noteName !== activeNoteName) switchTab(noteName);
           }
         });
 
         tabsList.addEventListener('dblclick', (e) => {
-          const tabEl = e.target.closest('.tab');
-          // Make sure not to trigger rename when double-clicking the delete button
-          if (tabEl && !e.target.classList.contains('delete-tab-btn')) {
-            renameNote(tabEl.dataset.noteName);
-          }
+          const nameEl = e.target.closest('.tab-name');
+          if (!nameEl) return;
+
+          const oldName = nameEl.textContent;
+          nameEl.setAttribute('contenteditable', true);
+          nameEl.focus();
+          document.execCommand('selectAll', false, null); // Select text
+
+          const onFinishEditing = (event) => {
+            nameEl.setAttribute('contenteditable', false);
+            const newName = nameEl.textContent.trim();
+            const finalName = performRename(oldName, newName);
+            if (newName !== finalName) {
+              nameEl.textContent = finalName; // Revert on failure
+            }
+            nameEl.removeEventListener('blur', onFinishEditing);
+            nameEl.removeEventListener('keydown', onKeyDown);
+          };
+
+          const onKeyDown = (event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              nameEl.blur();
+            } else if (event.key === 'Escape') {
+              nameEl.textContent = oldName;
+              nameEl.blur();
+            }
+          };
+
+          nameEl.addEventListener('blur', onFinishEditing);
+          nameEl.addEventListener('keydown', onKeyDown);
         });
 
         textarea.addEventListener('input', () => {
           clearTimeout(saveTimeout);
           saveTimeout = setTimeout(saveContent, 300);
+        });
+
+        confirmDeleteBtn.addEventListener('click', executeDelete);
+        cancelDeleteBtn.addEventListener('click', hideDeleteModal);
+        confirmModal.addEventListener('click', (e) => {
+          if (e.target === confirmModal) hideDeleteModal();
         });
       }
 
