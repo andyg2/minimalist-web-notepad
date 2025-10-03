@@ -2,6 +2,10 @@
 
 This is a serverless, single-file adaptation of the original [Minimalist Web Notepad](https://github.com/andyg2/minimalist-web-notepad). It has been re-engineered to be a completely private, browser-based notepad that requires no web server or internet connection to function.
 
+## Demo
+
+<https://dgte.pro/minimalist-web-notepad/>
+
 ## Your Data Stays With You
 
 The most important feature of this notepad is **privacy**.
