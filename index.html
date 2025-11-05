@@ -107,6 +107,24 @@
       background: #b7bcc1;
     }
 
+    #reset-app-btn {
+      margin-left: auto;
+      padding: 8px 12px;
+      background: #f5c5c5;
+      border: 1px solid #c82333;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #5a1212;
+      transition: background-color 0.2s, color 0.2s;
+      align-self: center;
+    }
+
+    #reset-app-btn:hover {
+      background: #dc3545;
+      color: white;
+    }
+
     /* --- Main Content Area Styles --- */
     .container {
       position: absolute;
@@ -176,7 +194,6 @@
       height: 100%;
       background: rgba(0, 0, 0, 0.5);
       display: none;
-      /* Hidden by default */
       align-items: center;
       justify-content: center;
       z-index: 1000;
@@ -265,6 +282,17 @@
         background: #495265;
       }
 
+      #reset-app-btn {
+        background: #5a2d32;
+        border-color: #c82333;
+        color: #f5c5c5;
+      }
+
+      #reset-app-btn:hover {
+        background: #dc3545;
+        color: white;
+      }
+
       #editor-container {
         background: #24262b;
         border-color: #495265;
@@ -317,6 +345,7 @@
   <div id="tabs-container">
     <button id="add-tab-btn" title="Add new note">+</button>
     <div id="tabs-list"></div>
+    <button id="reset-app-btn" title="Delete all notes and reset the application">Reset All</button>
   </div>
 
   <div class="container">
@@ -327,7 +356,6 @@
   </div>
   <div id="printable"></div>
 
-  <!-- Confirmation Modal HTML -->
   <div id="confirm-modal">
     <div class="modal-content">
       <h3>Delete Note?</h3>
@@ -350,10 +378,9 @@
       const noteToDeleteNameEl = document.getElementById('note-to-delete-name');
       const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
       const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
-
       const highlightWrapper = document.getElementById('highlight-wrapper');
       const highlightOutput = document.getElementById('highlight-output');
-
+      const resetAppBtn = document.getElementById('reset-app-btn');
 
       // App State
       let notes = [];
@@ -361,59 +388,49 @@
       let notePendingDeletion = null;
       let saveTimeout;
 
-      // Utility to escape HTML to prevent XSS from plain text parts
+      // --- Syntax Highlighting Functions ---
       function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
       }
 
-      // Main function to render text with highlighting
       function renderContent(text) {
-        // Regex to find ```lang\ncode\n``` blocks
         const codeBlockRegex = /^```(\w+)\n([\s\S]+?)\n```$/gm;
         let resultHtml = '';
         let lastIndex = 0;
         let match;
 
         while ((match = codeBlockRegex.exec(text)) !== null) {
-          // 1. Append the plain text before the code block
           const plainText = text.substring(lastIndex, match.index);
           resultHtml += escapeHtml(plainText);
 
-          // 2. Process and append the highlighted code block
           const language = match[1];
           const code = match[2];
 
           let highlightedCode;
-          // Check if highlight.js supports the language
           if (hljs.getLanguage(language)) {
             try {
               highlightedCode = hljs.highlight(code, { language: language, ignoreIllegals: true }).value;
             } catch (e) {
-              highlightedCode = escapeHtml(code); // Fallback on error
+              highlightedCode = escapeHtml(code);
             }
           } else {
-            highlightedCode = escapeHtml(code); // Language not supported, just escape it
+            highlightedCode = escapeHtml(code);
           }
-
           resultHtml += `<pre><code class="hljs language-${language}">${highlightedCode}</code></pre>`;
-
           lastIndex = match.index + match[0].length;
         }
 
-        // 3. Append any remaining plain text after the last code block
         if (lastIndex < text.length) {
           resultHtml += escapeHtml(text.substring(lastIndex));
         }
-
-        // Update the visible output and the printable area
         highlightOutput.innerHTML = resultHtml;
-        printable.innerHTML = resultHtml; // Also update printable content
+        printable.innerHTML = resultHtml;
       }
 
 
-      // --- Core Functions (modified) ---
+      // --- Core Functions ---
 
       function renderTabs() {
         tabsList.innerHTML = '';
@@ -451,12 +468,10 @@
           localStorage.setItem('notes_last_active', activeNoteName);
           const savedContent = localStorage.getItem('note-' + activeNoteName) || '';
           textarea.value = savedContent;
-          // NEW: Render content with highlighting
           renderContent(savedContent);
           document.title = activeNoteName;
         } else {
           textarea.value = '';
-          // NEW: Clear rendered content
           renderContent('');
           document.title = 'Local Notes';
         }
@@ -468,11 +483,7 @@
       function saveContent() {
         if (!activeNoteName) return;
         const storageKey = 'note-' + activeNoteName;
-        // IMPORTANT: We save the raw text from the textarea, not the rendered HTML
         const currentText = textarea.value;
-
-        // The rendering is already handled by the 'input' event,
-        // but we ensure the printable version is up-to-date here too.
         renderContent(currentText);
 
         if (currentText.length > 0) {
@@ -505,7 +516,7 @@
         const validationError = validateNoteName(newName, oldName);
         if (validationError) {
           alert(validationError);
-          return oldName; // Return old name to revert
+          return oldName;
         }
 
         const noteIndex = notes.indexOf(oldName);
@@ -521,9 +532,9 @@
             activeNoteName = newName;
             localStorage.setItem('notes_last_active', activeNoteName);
           }
-          switchTab(activeNoteName); // Full re-render
+          switchTab(activeNoteName);
         }
-        return newName; // Success
+        return newName;
       }
 
       function showDeleteModal(noteNameToDelete) {
@@ -576,7 +587,8 @@
         if (notes.length === 0) {
           notes.push('welcome');
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
-          localStorage.setItem('note-welcome', 'Hello and welcome!\n\n- Click + to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.\n\nHere is an example of a syntax-highlighted block:\n\n```json\n{\n  "key": "value",\n  "isAwesome": true,\n  "features": [\n    "tabs",\n    "local storage",\n    "syntax highlighting"\n  ]\n}\n```');
+          // Your modified welcome text
+          localStorage.setItem('note-welcome', 'Hello and welcome!\n\n- Click + to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.\n\nHere is an example of a syntax-highlighted block ise tripple backticks with the language name e.g. ```json\n\n```json\n{\n  "key": "value",\n  "isAwesome": true,\n  "features": [\n    "tabs",\n    "local storage",\n    "syntax highlighting"\n  ]\n}\n```');
         }
 
         const lastActive = localStorage.getItem('notes_last_active');
@@ -602,14 +614,14 @@
           const oldName = nameEl.textContent;
           nameEl.setAttribute('contenteditable', true);
           nameEl.focus();
-          document.execCommand('selectAll', false, null); // Select text
+          document.execCommand('selectAll', false, null);
 
           const onFinishEditing = (event) => {
             nameEl.setAttribute('contenteditable', false);
             const newName = nameEl.textContent.trim();
             const finalName = performRename(oldName, newName);
             if (newName !== finalName) {
-              nameEl.textContent = finalName; // Revert on failure
+              nameEl.textContent = finalName;
             }
             nameEl.removeEventListener('blur', onFinishEditing);
             nameEl.removeEventListener('keydown', onKeyDown);
@@ -631,7 +643,6 @@
 
         textarea.addEventListener('input', () => {
           renderContent(textarea.value);
-
           clearTimeout(saveTimeout);
           saveTimeout = setTimeout(saveContent, 300);
         });
@@ -645,6 +656,16 @@
         cancelDeleteBtn.addEventListener('click', hideDeleteModal);
         confirmModal.addEventListener('click', (e) => {
           if (e.target === confirmModal) hideDeleteModal();
+        });
+
+        resetAppBtn.addEventListener('click', () => {
+          const isConfirmed = window.confirm(
+            'Are you sure you want to delete ALL notes and reset the application?\n\nThis action cannot be undone.'
+          );
+          if (isConfirmed) {
+            localStorage.clear();
+            location.reload();
+          }
         });
       }
 
