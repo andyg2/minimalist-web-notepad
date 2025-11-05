@@ -44,9 +44,26 @@ This notepad provides a simple yet powerful tabbed interface for managing multip
 * **Automatic Saving:**
   * There is no "Save" button. All changes are saved automatically to your browser's storage a moment after you stop typing.
 
+* **Syntax Highlighting:**
+  * Enjoy automatic syntax highlighting for code snippets.
+  * Wrap your code in triple backticks, specifying the language name on the first line (e.g., `json`, `javascript`, `python`, `css`). For example:
+
+      ````markdown
+      ```json
+      {
+        "key": "value",
+        "highlighted": true
+      }
+      ```
+      ````
+
 * **Responsive Design:**
   * The interface supports both light and dark modes based on your system's preference.
   * The tab bar will wrap to multiple lines if you have too many tabs to fit in a single row.
+
+* **Application Reset:**
+  * Click the **Reset All** button in the top-right corner to completely clear all notes from your browser's storage.
+  * A confirmation dialog will appear to prevent you from accidentally erasing your data.
 
 ## Copyright and license
 
