@@ -7,6 +7,11 @@
   <title>Local Notes</title>
   <link rel="icon" href="favicon.ico" sizes="any">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+
   <style>
     body {
       margin: 0;
@@ -111,16 +116,51 @@
       left: 20px;
     }
 
-    #content {
+    #editor-container {
+      position: relative;
+      height: 100%;
+      width: 100%;
+      border: 1px solid #ddd;
+      background: #fff;
+    }
+
+    #content,
+    #highlight-wrapper {
       margin: 0;
       padding: 20px;
       overflow-y: auto;
-      resize: none;
       width: 100%;
       height: 100%;
       box-sizing: border-box;
-      border: 1px solid #ddd;
       outline: none;
+
+      font-family: monospace;
+      font-size: 16px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #content {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 2;
+      resize: none;
+      background: transparent;
+      color: transparent;
+      caret-color: black;
+    }
+
+    #highlight-wrapper {
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+
+    #highlight-output {
+      display: block;
     }
 
     #printable {
@@ -225,10 +265,18 @@
         background: #495265;
       }
 
-      #content {
+      #editor-container {
         background: #24262b;
-        color: #fff;
         border-color: #495265;
+      }
+
+      #content {
+        color: transparent;
+        caret-color: white;
+      }
+
+      #highlight-wrapper {
+        color: #fff;
       }
 
       .modal-content {
@@ -254,6 +302,9 @@
 
       #printable {
         display: block;
+        font-family: monospace;
+        font-size: 16px;
+        line-height: 1.5;
         white-space: pre-wrap;
         word-break: break-word;
       }
@@ -269,9 +320,12 @@
   </div>
 
   <div class="container">
-    <textarea id="content"></textarea>
+    <div id="editor-container">
+      <textarea id="content" spellcheck="false"></textarea>
+      <pre id="highlight-wrapper"><code id="highlight-output"></code></pre>
+    </div>
   </div>
-  <pre id="printable"></pre>
+  <div id="printable"></div>
 
   <!-- Confirmation Modal HTML -->
   <div id="confirm-modal">
@@ -297,13 +351,69 @@
       const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
       const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
 
+      const highlightWrapper = document.getElementById('highlight-wrapper');
+      const highlightOutput = document.getElementById('highlight-output');
+
+
       // App State
       let notes = [];
       let activeNoteName = null;
       let notePendingDeletion = null;
       let saveTimeout;
 
-      // --- Core Functions ---
+      // Utility to escape HTML to prevent XSS from plain text parts
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      // Main function to render text with highlighting
+      function renderContent(text) {
+        // Regex to find ```lang\ncode\n``` blocks
+        const codeBlockRegex = /^```(\w+)\n([\s\S]+?)\n```$/gm;
+        let resultHtml = '';
+        let lastIndex = 0;
+        let match;
+
+        while ((match = codeBlockRegex.exec(text)) !== null) {
+          // 1. Append the plain text before the code block
+          const plainText = text.substring(lastIndex, match.index);
+          resultHtml += escapeHtml(plainText);
+
+          // 2. Process and append the highlighted code block
+          const language = match[1];
+          const code = match[2];
+
+          let highlightedCode;
+          // Check if highlight.js supports the language
+          if (hljs.getLanguage(language)) {
+            try {
+              highlightedCode = hljs.highlight(code, { language: language, ignoreIllegals: true }).value;
+            } catch (e) {
+              highlightedCode = escapeHtml(code); // Fallback on error
+            }
+          } else {
+            highlightedCode = escapeHtml(code); // Language not supported, just escape it
+          }
+
+          resultHtml += `<pre><code class="hljs language-${language}">${highlightedCode}</code></pre>`;
+
+          lastIndex = match.index + match[0].length;
+        }
+
+        // 3. Append any remaining plain text after the last code block
+        if (lastIndex < text.length) {
+          resultHtml += escapeHtml(text.substring(lastIndex));
+        }
+
+        // Update the visible output and the printable area
+        highlightOutput.innerHTML = resultHtml;
+        printable.innerHTML = resultHtml; // Also update printable content
+      }
+
+
+      // --- Core Functions (modified) ---
 
       function renderTabs() {
         tabsList.innerHTML = '';
@@ -341,11 +451,13 @@
           localStorage.setItem('notes_last_active', activeNoteName);
           const savedContent = localStorage.getItem('note-' + activeNoteName) || '';
           textarea.value = savedContent;
-          printable.textContent = savedContent;
+          // NEW: Render content with highlighting
+          renderContent(savedContent);
           document.title = activeNoteName;
         } else {
           textarea.value = '';
-          printable.textContent = '';
+          // NEW: Clear rendered content
+          renderContent('');
           document.title = 'Local Notes';
         }
 
@@ -356,8 +468,13 @@
       function saveContent() {
         if (!activeNoteName) return;
         const storageKey = 'note-' + activeNoteName;
+        // IMPORTANT: We save the raw text from the textarea, not the rendered HTML
         const currentText = textarea.value;
-        printable.textContent = currentText;
+
+        // The rendering is already handled by the 'input' event,
+        // but we ensure the printable version is up-to-date here too.
+        renderContent(currentText);
+
         if (currentText.length > 0) {
           localStorage.setItem(storageKey, currentText);
         } else {
@@ -459,7 +576,7 @@
         if (notes.length === 0) {
           notes.push('welcome');
           localStorage.setItem('notes_tab_list', JSON.stringify(notes));
-          localStorage.setItem('note-welcome', 'Hello and welcome!\n\n- Click + to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.');
+          localStorage.setItem('note-welcome', 'Hello and welcome!\n\n- Click + to add a new note.\n- Double-click a tab to rename it.\n- Click the \'x\' to delete a note.\n\nHere is an example of a syntax-highlighted block:\n\n```json\n{\n  "key": "value",\n  "isAwesome": true,\n  "features": [\n    "tabs",\n    "local storage",\n    "syntax highlighting"\n  ]\n}\n```');
         }
 
         const lastActive = localStorage.getItem('notes_last_active');
@@ -513,8 +630,15 @@
         });
 
         textarea.addEventListener('input', () => {
+          renderContent(textarea.value);
+
           clearTimeout(saveTimeout);
           saveTimeout = setTimeout(saveContent, 300);
+        });
+
+        textarea.addEventListener('scroll', () => {
+          highlightWrapper.scrollTop = textarea.scrollTop;
+          highlightWrapper.scrollLeft = textarea.scrollLeft;
         });
 
         confirmDeleteBtn.addEventListener('click', executeDelete);
